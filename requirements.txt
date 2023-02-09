@@ -1,0 +1,9 @@
+tqdm
+qiniu
+requests
+
+# 打包相关
+nuitka
+ordered-set
+zstandard
+# nuitka --output-dir=nuitka --windows-icon-from-ico=res/icon.ico --onefile x.py
