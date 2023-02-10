@@ -45,7 +45,7 @@ def read_conf(conf_path: str) -> dict:
                 f.write('[nessus]\n')
                 f.write('username    =   xxx\n')
                 f.write('password    =   xxx\n')
-                f.write('host        =   localhost:8834\n')
+                f.write('host        =   localhost\n')
                 f.write('\n')
                 f.write('[v2ray]\n')
                 f.write('address     =   nessus-update.chenql.cn\n')
@@ -59,9 +59,10 @@ def read_conf(conf_path: str) -> dict:
         config.read(conf_path, encoding='UTF-8')
         ret['nessus']['username'] = config.get('nessus', 'username', fallback='username')
         ret['nessus']['password'] = config.get('nessus', 'password', fallback='password')
-        ret['nessus']['host'] = 'https://' + re.sub('http://|https://', '', config.get('nessus', 'host', fallback='localhost:8834'))
+        ret['nessus']['host'] = config.get('nessus', 'host', fallback='localhost')
         v2ray_json = {
             'log': {'loglevel': 'warning'},
+            'dns': {'hosts': {'nessus.local': ret['nessus']['host']}},
             'reverse': {
                 'bridges': [
                     {'tag': 'bridge', 'domain': '{}.nessus-tunnel'.format(config.get('v2ray', 'user', fallback='placeholder'))}
@@ -74,12 +75,12 @@ def read_conf(conf_path: str) -> dict:
                     'settings': {
                         'vnext': [{
                             'address': config.get('v2ray', 'address', fallback='nessus-update.chenql.cn'),
-                            'port': config.getint('v2ray', 'port', fallback=0),
+                            'port': config.getint('v2ray', 'port', fallback=8835),
                             'users': [{'id': '1b73a61f-29b3-4633-a804-53c371e48e75', 'security': 'auto'}]
                         }]
                     }
                 },
-                {'tag': 'direct', 'protocol': 'freedom'}
+                {'tag': 'direct', 'protocol': 'freedom', 'settings': {'domainStrategy': 'UseIP'}}
             ],
             'routing': {
                 'rules': [
@@ -118,10 +119,12 @@ def test_conf(config:dict) -> bool:
 
     # nessus服务端必须有效
     print('[Info] 检查nessus配置...')
+    base_url = 'https://{}:8834'.format(config['nessus']['host'])
+    print(' -> 连接目标 = {}'.format(base_url))
     try:
         # 无法连接或登录失败时终止验证
         r = session.post(
-            '{}/login'.format(config['nessus']['host']), 
+            '{}/login'.format(base_url), 
             verify=False, 
             headers={
                 'X-Securitycenter': 'a04629e1-df01-5d5c-917f-f7f88beaa993',
@@ -142,7 +145,7 @@ def test_conf(config:dict) -> bool:
         else:
             print(' -> 登录成功，当前特征库版本 = {}'.format(config['nessus']['plugin_set']))
         r = session.post(
-            '{}/logout'.format(config['nessus']['host']), 
+            '{}/logout'.format(base_url), 
             verify=False, 
             headers={
                 'X-Cookie': 'token=' + token,
@@ -182,9 +185,10 @@ def upload(local_file_info, scanner_info):
     print('[Info] 使用本地文件更新Scanner...')
     print(' -> path: {}'.format(local_file_info['path']))
     print(' -> plugin_set: {}'.format(local_file_info['plugin_set']))
+    base_url = 'https://{}:8834'.format(scanner_info['host'])
     print(' -> seq_1(login)')
     r = session.post(
-        '{}/login'.format(scanner_info['host']), 
+        '{}/login'.format(base_url), 
         verify=False, 
         headers={
             'X-Securitycenter': 'a04629e1-df01-5d5c-917f-f7f88beaa993',
@@ -198,7 +202,7 @@ def upload(local_file_info, scanner_info):
     print(' -> seq_2(upload)')
     with open(local_file_info['path'],'rb') as f:
         r = session.post(
-            '{}/file/upload'.format(scanner_info['host']), 
+            '{}/file/upload'.format(base_url), 
             verify=False, 
             headers={
                 'X-Cookie': 'token=' + token,
@@ -209,7 +213,7 @@ def upload(local_file_info, scanner_info):
 
     print(' -> seq_3(process)')
     r = session.post(
-        '{}/plugins/process'.format(scanner_info['host']), 
+        '{}/plugins/process'.format(base_url), 
         verify=False, 
         headers={
             'X-Cookie': 'token=' + token,
@@ -220,7 +224,7 @@ def upload(local_file_info, scanner_info):
 
     print(' -> seq_4(logout)')
     r = session.post(
-        '{}/logout'.format(scanner_info['host']), 
+        '{}/logout'.format(base_url), 
         verify=False, 
         headers={
             'X-Cookie': 'token=' + token,
