@@ -297,8 +297,10 @@ if __name__ == '__main__':
     # 触发oss下载需满足的条件：
     # - oss距离当前时间差异小于15天；
     # - oss距离现有特征库差异大于15天；
+    # - oss距离离线文件差异大于0；
     if (datetime.datetime.now() - remote_datetime <= datetime.timedelta(days=15) and 
-        remote_datetime - current_datetime > datetime.timedelta(days=15)):
+        remote_datetime - current_datetime > datetime.timedelta(days=15) and
+        remote_datetime > local_datetime):
         result = input(' -> 是否从OSS缓存下载特征库{}({}MB)？（Y/n）'.format(
             config['oss']['plugin_set'], 
             config['oss']['size'][:-6]
