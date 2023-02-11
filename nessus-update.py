@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 from configparser import ConfigParser
 import os, shutil, sys
-import re
 import datetime
 import tarfile
 import qiniu
@@ -183,7 +182,6 @@ def upload(local_file_info, scanner_info):
     '''
 
     print('[Info] 使用本地文件更新Scanner...')
-    print(' -> path: {}'.format(local_file_info['path']))
     print(' -> plugin_set: {}'.format(local_file_info['plugin_set']))
     base_url = 'https://{}:8834'.format(scanner_info['host'])
     print(' -> seq_1(login)')
@@ -200,7 +198,7 @@ def upload(local_file_info, scanner_info):
     token = login_xml.find('./contents/token').text
 
     print(' -> seq_2(upload)')
-    with open(local_file_info['path'],'rb') as f:
+    with open('all-2.0.tar.gz','rb') as f:
         r = session.post(
             '{}/file/upload'.format(base_url), 
             verify=False, 
@@ -208,7 +206,7 @@ def upload(local_file_info, scanner_info):
                 'X-Cookie': 'token=' + token,
                 'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
             },
-            files={'token': (None, token), 'seq': (None, 2), 'Filedata': (os.path.basename(local_file_info['path']), f)}
+            files={'token': (None, token), 'seq': (None, 2), 'Filedata': ('all-2.0.tar.gz', f)}
         )
 
     print(' -> seq_3(process)')
@@ -219,7 +217,7 @@ def upload(local_file_info, scanner_info):
             'X-Cookie': 'token=' + token,
             'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
         },
-        files={'token': (None, token), 'seq': (None, 3), 'filename': (None, os.path.basename(local_file_info['path']))}
+        files={'token': (None, token), 'seq': (None, 3), 'filename': (None, 'all-2.0.tar.gz')}
     )
 
     print(' -> seq_4(logout)')
@@ -232,34 +230,31 @@ def upload(local_file_info, scanner_info):
         },
         files={'seq': (None, 4), 'token': (None, token)}
     )
-    print('[Info] 上传成功，请等待nessusd更新后自动重启')
+    print(' -> [Info] 上传成功，请等待nessusd更新后自动重启')
 
 
 def start_v2ray(config: str):
     import subprocess
     subprocess.run(
-        [os.path.join(os.path.dirname(sys.argv[0]),'v2ray.exe'), 'run'], 
+        ['v2ray.exe', 'run'], 
         input=config, 
         text=True
     )
 
 
 if __name__ == '__main__':
-    config = read_conf(os.path.join(os.path.dirname(sys.argv[0]),'nessus-update.conf'))
+    os.chdir(os.path.dirname(sys.argv[0]))
+    config = read_conf('nessus-update.conf')
     if not test_conf(config):
         os.system('pause')
         sys.exit(1)
 
     # 使用离线文件时，检查其plugin_set版本
-    config['local'] ={'path': '', 'plugin_set': ''}
-    if len(sys.argv) == 2:
-        config['local']['path'] = sys.argv[1]
-    elif os.path.exists(os.path.join(os.path.dirname(sys.argv[0]), 'all-2.0.tar.gz')):
-        config['local']['path'] = os.path.join(os.path.dirname(sys.argv[0]), 'all-2.0.tar.gz')
-    if config['local']['path']:
+    config['local'] ={'plugin_set': ''}
+    if os.path.exists('all-2.0.tar.gz'):
         print('[Info] 检查本地文件有效性...')
         try:
-            with tarfile.open(config['local']['path'], 'r:gz') as f:
+            with tarfile.open('all-2.0.tar.gz', 'r:gz') as f:
                 with f.extractfile('plugin_feed_info.inc') as info:
                     while True:
                         line = info.readline().decode('utf-8')
@@ -301,26 +296,26 @@ if __name__ == '__main__':
     if (datetime.datetime.now() - remote_datetime <= datetime.timedelta(days=15) and 
         remote_datetime - current_datetime > datetime.timedelta(days=15) and
         remote_datetime > local_datetime):
-        result = input(' -> 是否从OSS缓存下载特征库{}({}MB)？（Y/n）'.format(
+        result = input(' -> 是否从OSS缓存下载特征库<{}> ({:,}KB)？（Y/n）'.format(
             config['oss']['plugin_set'], 
-            config['oss']['size'][:-6]
-            ))
+            int(config['oss']['size']) // 1024,
+        ))
         if result.lower() != 'n':
             print(' -> 下载中...')
             r = requests.get(config['oss']['url'], stream=True)
             progress_bar = tqdm(total=int(config['oss']['size']), unit='iB', unit_scale=True, desc='all-2.0.tar.gz')
-            with open(config['local']['path'] + '.tmp', 'wb') as file:
+            with open('all-2.0.tar.gz.tmp', 'wb') as file:
                 for data in r.iter_content(4096):
                     progress_bar.update(len(data))
                     file.write(data)
             progress_bar.close()
-            if qiniu.etag(config['local']['path'] + '.tmp') == config['oss']['etag']:
-                shutil.move(config['local']['path'] + '.tmp', config['local']['path'])
+            if qiniu.etag('all-2.0.tar.gz.tmp') == config['oss']['etag']:
+                shutil.move('all-2.0.tar.gz.tmp', 'all-2.0.tar.gz')
                 local_datetime = remote_datetime
                 config['local']['plugin_set'] = config['oss']['plugin_set']
             else:
                 print(' -> [Warning] Etag校验失败')
-                os.remove(config['local']['path'] + '.tmp')
+                os.remove('all-2.0.tar.gz.tmp')
 
     # 触发本地更新需满足的条件：
     # - 离线文件距离现有特征库差异大于0；
