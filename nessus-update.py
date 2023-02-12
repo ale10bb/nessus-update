@@ -10,7 +10,6 @@ import traceback
 # session用于和 nessus scanner 之间的通信
 import requests
 import xml.etree.ElementTree as ET
-session = requests.session()
 # 去除nessus自签名证书的警告
 requests.packages.urllib3.disable_warnings()
 
@@ -118,42 +117,40 @@ def test_conf(config:dict) -> bool:
 
     # nessus服务端必须有效
     print('[Info] 检查nessus配置...')
-    base_url = 'https://{}:8834'.format(config['nessus']['host'])
-    print(' -> 连接目标 = {}'.format(base_url))
     try:
+        session = requests.session()
+        base_url = 'https://{}:8834'.format(config['nessus']['host'])
+        print(' -> 连接目标: {}'.format(base_url))
+        session.headers.update({'User-Agent': 'SecurityCenter/0.0.0'})
+        session.verify = False
         # 无法连接或登录失败时终止验证
+        r = session.get('{}/feed'.format(base_url))
+        r.raise_for_status()
+        print(' -> 客户端版本: {}'.format(ET.fromstring(r.text).find('./contents/server_version').text))
+
         r = session.post(
             '{}/login'.format(base_url), 
-            verify=False, 
-            headers={
-                'X-Securitycenter': 'a04629e1-df01-5d5c-917f-f7f88beaa993',
-                'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
-            },
             data={'login': config['nessus']['username'], 'password': config['nessus']['password'], 'seq': 1}
         )
-        assert r.status_code == 200, 'login failed'
+        r.raise_for_status()
 
         # 从Scanner中读取当前插件版本
-        login_xml = ET.fromstring(r.content)
+        login_xml = ET.fromstring(r.text)
         token = login_xml.find('./contents/token').text
         # 未注册的新scanner的plugin_set标签值为空(None)
         config['nessus']['plugin_set'] = login_xml.find('./contents/plugin_set').text
         if not config['nessus']['plugin_set']:
             config['nessus']['plugin_set'] = ''
-            print(' -> 登录成功，当前特征库版本 (plugin_set) = <null> (unregistered scanner)')
+            print(' -> 特征库版本: <null> (unregistered scanner)')
         else:
-            print(' -> 登录成功，当前特征库版本 = {}'.format(config['nessus']['plugin_set']))
+            print(' -> 特征库版本: <{}>'.format(config['nessus']['plugin_set']))
         r = session.post(
             '{}/logout'.format(base_url), 
-            verify=False, 
-            headers={
-                'X-Cookie': 'token=' + token,
-                'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
-            },
             files={'seq': (None, 2), 'token': (None, token)}
         )
+        r.raise_for_status()
     except:
-        print(' -> [Error] Nessus Scanner 登录失败')
+        print(' -> [Error] Nessus Scanner 连接/登录失败')
         traceback.print_exc(limit=1)
         return False
 
@@ -164,7 +161,7 @@ def test_conf(config:dict) -> bool:
         config['oss']['size'] = r.headers['Content-Length']
         config['oss']['etag'] = r.headers['Etag'][1:-1]
         config['oss']['plugin_set'] = r.headers['X-Qn-Meta-Plugin-Set']
-        print(' -> 连接成功，特征库版本 (plugin_set) = {}'.format(config['oss']['plugin_set']))
+        print(' -> 特征库版本: <{}>'.format(config['oss']['plugin_set']))
     except:
         config['oss']['plugin_set'] = ''
         print(' -> [Warning] OSS连接失败/非法的URL')
@@ -182,55 +179,45 @@ def upload(local_file_info, scanner_info):
     '''
 
     print('[Info] 使用本地文件更新Scanner...')
-    print(' -> plugin_set: {}'.format(local_file_info['plugin_set']))
-    base_url = 'https://{}:8834'.format(scanner_info['host'])
-    print(' -> seq_1(login)')
-    r = session.post(
-        '{}/login'.format(base_url), 
-        verify=False, 
-        headers={
-            'X-Securitycenter': 'a04629e1-df01-5d5c-917f-f7f88beaa993',
-            'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
-        },
-        data={'login': scanner_info['username'], 'password': scanner_info['password'], 'seq': 1}
-    )
-    login_xml = ET.fromstring(r.content)
-    token = login_xml.find('./contents/token').text
-
-    print(' -> seq_2(upload)')
-    with open('all-2.0.tar.gz','rb') as f:
+    print(' -> 特征库版本: <{}>'.format(local_file_info['plugin_set']))
+    try:
+        session = requests.session()
+        base_url = 'https://{}:8834'.format(scanner_info['host'])
+        session.headers.update({'User-Agent': 'SecurityCenter/0.0.0'})
+        session.verify = False
+        print(' -> seq_1 (login)')
         r = session.post(
-            '{}/file/upload'.format(base_url), 
-            verify=False, 
-            headers={
-                'X-Cookie': 'token=' + token,
-                'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
-            },
-            files={'token': (None, token), 'seq': (None, 2), 'Filedata': ('all-2.0.tar.gz', f)}
+            '{}/login'.format(base_url), 
+            data={'login': scanner_info['username'], 'password': scanner_info['password'], 'seq': 1}
         )
+        r.raise_for_status()
+        token = ET.fromstring(r.text).find('./contents/token').text
 
-    print(' -> seq_3(process)')
-    r = session.post(
-        '{}/plugins/process'.format(base_url), 
-        verify=False, 
-        headers={
-            'X-Cookie': 'token=' + token,
-            'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
-        },
-        files={'token': (None, token), 'seq': (None, 3), 'filename': (None, 'all-2.0.tar.gz')}
-    )
+        print(' -> seq_2 (upload)')
+        with open('all-2.0.tar.gz','rb') as f:
+            r = session.post(
+                '{}/file/upload'.format(base_url), 
+                files={'token': (None, token), 'seq': (None, 2), 'Filedata': ('all-2.0.tar.gz', f)}
+            )
+            r.raise_for_status()
 
-    print(' -> seq_4(logout)')
-    r = session.post(
-        '{}/logout'.format(base_url), 
-        verify=False, 
-        headers={
-            'X-Cookie': 'token=' + token,
-            'User-Agent': 'SecurityCenter/5.5.2 (201709293113)'
-        },
-        files={'seq': (None, 4), 'token': (None, token)}
-    )
-    print(' -> [Info] 上传成功，请等待nessusd更新后自动重启')
+        print(' -> seq_3 (process)')
+        r = session.post(
+            '{}/plugins/process'.format(base_url), 
+            files={'token': (None, token), 'seq': (None, 3), 'filename': (None, 'all-2.0.tar.gz')}
+        )
+        r.raise_for_status()
+
+        print(' -> seq_4 (logout)')
+        r = session.post(
+            '{}/logout'.format(base_url), 
+            files={'seq': (None, 4), 'token': (None, token)}
+        )
+        r.raise_for_status()
+        print(' -> [Info] 上传成功，请等待nessusd更新后自动重启')
+    except:
+        print(' -> [Error] 上传失败')
+        traceback.print_exc(limit=1)
 
 
 def start_v2ray(config: str):
@@ -264,7 +251,7 @@ if __name__ == '__main__':
                             config['local']['plugin_set'] = line.split('"')[1]
                             break
             assert config['local']['plugin_set']
-            print(' -> 文件有效，特征库版本 (plugin_set) = {}'.format(config['local']['plugin_set']))
+            print(' -> 特征库版本: <{}>'.format(config['local']['plugin_set']))
         except:
             print(' -> 文件无效')
             traceback.print_exc(limit=1)
