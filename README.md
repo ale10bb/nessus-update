@@ -6,7 +6,7 @@ Nessus Scanner 的更新工具
 
 1. 找负责nessus的管理员，把更新地址改成``xxx.nessus-update.chenql.cn``（xxx是自己的邮箱username）。
 2. 找服务器管理员添加反向代理路径。
-3. 打开默认``nessus-update.conf``并修改以下配置
+3. 打开默认``nessus-update.conf``并修改以下xxx处
    - ``[nessus]``节中设置客户端的username和password
    - ``[v2ray]``节中设置user（自己的邮箱username）
 4. 打开nessus-update.exe，开在后台（不用关本机防火墙）
@@ -26,9 +26,10 @@ OSS缓存的地址可在配置文件的``[oss]``节中设置。当前默认下�
 
 工具支持离线更新功能。如果本地已经有完整插件包``all-2.0.tar.gz``，更新工具启动时会校验其有效性。如果插件包有效，将进入离线更新模式。
 
-离线更新时，工具读取``[nessus]``节的所有参数，并尝试登录Scanner。更新本机Scanner时，host可以设置为``localhost``或``127.0.0.1``，也无需关闭防火墙。如果需要更新其他Scanner，需保证对方的Scanner网络地址（如``https://192.168.1.2:8834``）可以访问，必要时让对方关闭防火墙。
+离线更新时，工具读取``[nessus]``节的所有参数，并尝试登录Scanner。更新本机Scanner时，host默认设置为``127.0.0.1``，也无需关闭防火墙。如果需要更新其他Scanner，需保证对方的Scanner网络地址（如``https://192.168.1.2:8834``）可以访问，必要时让对方关闭防火墙。
 
-- 注意：Scanner的端口必须为8834
+- 注1：host必须为IP
+- 注2：Scanner的端口必须为8834
 
 ### 反向代理
 

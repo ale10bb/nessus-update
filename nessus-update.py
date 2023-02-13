@@ -43,7 +43,7 @@ def read_conf(conf_path: str) -> dict:
                 f.write('[nessus]\n')
                 f.write('username    =   xxx\n')
                 f.write('password    =   xxx\n')
-                f.write('host        =   localhost\n')
+                f.write('host        =   127.0.0.1\n')
                 f.write('\n')
                 f.write('[v2ray]\n')
                 f.write('address     =   nessus-update.chenql.cn\n')
@@ -57,7 +57,7 @@ def read_conf(conf_path: str) -> dict:
         config.read(conf_path, encoding='UTF-8')
         ret['nessus']['username'] = config.get('nessus', 'username', fallback='username')
         ret['nessus']['password'] = config.get('nessus', 'password', fallback='password')
-        ret['nessus']['host'] = config.get('nessus', 'host', fallback='localhost')
+        ret['nessus']['host'] = config.get('nessus', 'host', fallback='127.0.0.1')
         v2ray_json = {
             'log': {'loglevel': 'warning'},
             'dns': {'hosts': {'nessus.local': ret['nessus']['host']}},
