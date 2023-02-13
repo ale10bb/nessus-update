@@ -240,7 +240,7 @@ def start_v2ray(config: str):
 if __name__ == '__main__':
     print('*******************************************')
     print('          Nessus Scanner 更新工具          ')
-    print('                         - v2.1.0          ')
+    print('                         - v2.1.1          ')
     print('*******************************************')
     print('')
 
