@@ -223,6 +223,13 @@ def upload(local_file_info, scanner_info):
 
 def start_v2ray(config: str):
     import subprocess
+    try:
+        subprocess.run(['v2ray.exe', 'version'], check=True , capture_output=True)     
+    except:
+        print(' -> [Error] 启动失败')
+        traceback.print_exc(limit=1)
+        return
+
     subprocess.run(
         ['v2ray.exe', 'run'], 
         input=config, 
