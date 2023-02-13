@@ -4,3 +4,4 @@ __pycache__
 /nuitka
 /v2ray.exe
 nessus-update.conf
+nessus-update.log

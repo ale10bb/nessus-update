@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from configparser import ConfigParser
 import os, shutil, sys
+import logging
 import datetime
 import tarfile
 import qiniu
@@ -27,6 +28,7 @@ def read_conf(conf_path: str) -> dict:
             'oss': {'url': '', 'size': '', 'etag': '', 'plugin_set': ''},
         }
     '''
+    logger = logging.getLogger('read_conf()')
     import json
     ret = {
         'nessus': {'username': '', 'password': '', 'host': '', 'plugin_set': ''},
@@ -35,10 +37,10 @@ def read_conf(conf_path: str) -> dict:
     }  
 
     # 配置文件必须存在且内容必须合法
-    print('[Info] 读取配置...')
+    logger.info('读取配置...')
     try:
         if not os.path.exists(conf_path):
-            print(' -> [Warning] nessus-update.conf不存在，写入默认配置')
+            logger.warning('nessus-update.conf不存在，写入默认配置')
             with open(conf_path, 'w') as f:
                 f.write('[nessus]\n')
                 f.write('username    =   xxx\n')
@@ -55,9 +57,13 @@ def read_conf(conf_path: str) -> dict:
                 f.write('\n')
         config = ConfigParser()
         config.read(conf_path, encoding='UTF-8')
+
         ret['nessus']['username'] = config.get('nessus', 'username', fallback='username')
         ret['nessus']['password'] = config.get('nessus', 'password', fallback='password')
         ret['nessus']['host'] = config.get('nessus', 'host', fallback='127.0.0.1')
+        logger.debug('nessus.user: {}'.format(ret['nessus']['username']))
+        logger.debug('nessus.host: {}'.format(ret['nessus']['host']))
+
         v2ray_json = {
             'log': {'loglevel': 'warning'},
             'dns': {'hosts': {'nessus.local': ret['nessus']['host']}},
@@ -96,11 +102,15 @@ def read_conf(conf_path: str) -> dict:
                 ]
             }
         } 
+        logger.debug('v2ray.address: {}'.format(config.get('v2ray', 'address', fallback='nessus-update.chenql.cn')))
+        logger.debug('v2ray.port: {}'.format(config.getint('v2ray', 'port', fallback=8835)))
+        logger.debug('v2ray.bridge: {}'.format(config.get('v2ray', 'user', fallback='placeholder')))
         ret['v2ray']['json'] = json.dumps(v2ray_json)
+        
         ret['oss']['url'] = config.get('oss', 'url', fallback='http://static.chenql.cn/nessus/all-2.0.tar.gz')
+        logger.debug('oss.url: {}'.format(ret['oss']['url']))
     except:
-        print(' -> [Error] 读取配置文件失败')
-        traceback.print_exc(limit=1)
+        logger.error('读取配置文件失败\n{}'.format(traceback.format_exc(limit=1)))
 
     return ret
 
@@ -114,24 +124,28 @@ def test_conf(config:dict) -> bool:
     Return:
         True/False
     '''
+    logger = logging.getLogger('test_conf()')
+    logger.debug('args: {}'.format(config))
 
     # nessus服务端必须有效
-    print('[Info] 检查nessus配置...')
+    logger.info('检查nessus配置...')
     try:
         session = requests.session()
         base_url = 'https://{}:8834'.format(config['nessus']['host'])
-        print(' -> 连接目标: {}'.format(base_url))
+        logger.info('连接目标: {}'.format(base_url))
         session.headers.update({'User-Agent': 'SecurityCenter/0.0.0'})
         session.verify = False
         # 无法连接或登录失败时终止验证
         r = session.get('{}/feed'.format(base_url))
         r.raise_for_status()
-        print(' -> 客户端版本: {}'.format(ET.fromstring(r.text).find('./contents/server_version').text))
+        logger.debug('r: ({})\n{}'.format(r.status_code, r.text))
+        logger.info('客户端版本: {}'.format(ET.fromstring(r.text).find('./contents/server_version').text))
 
         r = session.post(
             '{}/login'.format(base_url), 
             data={'login': config['nessus']['username'], 'password': config['nessus']['password'], 'seq': 1}
         )
+        logger.debug('r: ({})\n{}'.format(r.status_code, r.text))
         r.raise_for_status()
 
         # 从Scanner中读取当前插件版本
@@ -141,32 +155,31 @@ def test_conf(config:dict) -> bool:
         config['nessus']['plugin_set'] = login_xml.find('./contents/plugin_set').text
         if not config['nessus']['plugin_set']:
             config['nessus']['plugin_set'] = ''
-            print(' -> 特征库版本: <null> (unregistered scanner)')
+            logger.info('特征库版本: <null> (unregistered scanner)')
         else:
-            print(' -> 特征库版本: <{}>'.format(config['nessus']['plugin_set']))
+            logger.info('特征库版本: <{}>'.format(config['nessus']['plugin_set']))
         r = session.post(
             '{}/logout'.format(base_url), 
             files={'seq': (None, 2), 'token': (None, token)}
         )
+        logger.debug('r: ({})\n{}'.format(r.status_code, r.text))
         r.raise_for_status()
     except:
-        print(' -> [Error] Nessus Scanner 连接/登录失败')
-        traceback.print_exc(limit=1)
-        return False
+        logger.error('Nessus Scanner 连接/登录失败\n{}'.format(traceback.format_exc(limit=1)))
 
-    print('[Info] 检查OSS配置...')
+    logger.info('检查OSS配置...')
     try:
-        print(' -> 文件路径: {}'.format(config['oss']['url']))
+        logger.info('文件路径: {}'.format(config['oss']['url']))
         r = requests.head(config['oss']['url'])
+        logger.debug('r: ({})\n{}'.format(r.status_code, r.headers))
         r.raise_for_status()
         config['oss']['size'] = r.headers['Content-Length']
         config['oss']['etag'] = r.headers['Etag'][1:-1]
         config['oss']['plugin_set'] = r.headers['X-Qn-Meta-Plugin-Set']
-        print(' -> 特征库版本: <{}>'.format(config['oss']['plugin_set']))
+        logger.info('特征库版本: <{}>'.format(config['oss']['plugin_set']))
     except:
         config['oss']['plugin_set'] = ''
-        print(' -> [Warning] OSS连接失败/非法的URL')
-        traceback.print_exc(limit=1)
+        logger.warning('OSS连接失败/非法的URL\n{}'.format(traceback.format_exc(limit=1)))
 
     return True
 
@@ -178,23 +191,26 @@ def upload(local_file_info, scanner_info):
         local_file_info(dict): 本地完整包信息
         scanner_info(dict): Scanner配置信息
     '''
+    logger = logging.getLogger('upload()')
+    logger.debug('args: {}'.format({'local_file': local_file_info, 'scanner': scanner_info}))
 
-    print('[Info] 使用本地文件更新Scanner...')
-    print(' -> 特征库版本: <{}>'.format(local_file_info['plugin_set']))
+    logger.info('使用本地文件更新Scanner...')
+    logger.info('特征库版本: <{}>'.format(local_file_info['plugin_set']))
     try:
         session = requests.session()
         base_url = 'https://{}:8834'.format(scanner_info['host'])
         session.headers.update({'User-Agent': 'SecurityCenter/0.0.0'})
         session.verify = False
-        print(' -> seq_1 (login)')
+        logger.info('seq_1 (login)')
         r = session.post(
             '{}/login'.format(base_url), 
             data={'login': scanner_info['username'], 'password': scanner_info['password'], 'seq': 1}
         )
+        logger.debug('r: ({})\n{}'.format(r.status_code, r.text))
         r.raise_for_status()
         token = ET.fromstring(r.text).find('./contents/token').text
 
-        print(' -> seq_2 (upload)')
+        logger.info('seq_2 (upload)')
         with open('all-2.0.tar.gz','rb') as f:
             r = session.post(
                 '{}/file/upload'.format(base_url), 
@@ -202,32 +218,35 @@ def upload(local_file_info, scanner_info):
             )
             r.raise_for_status()
 
-        print(' -> seq_3 (process)')
+        logger.info('seq_3 (process)')
         r = session.post(
             '{}/plugins/process'.format(base_url), 
             files={'token': (None, token), 'seq': (None, 3), 'filename': (None, 'all-2.0.tar.gz')}
         )
+        logger.debug('r: ({})\n{}'.format(r.status_code, r.text))
         r.raise_for_status()
 
-        print(' -> seq_4 (logout)')
+        logger.info('seq_4 (logout)')
         r = session.post(
             '{}/logout'.format(base_url), 
             files={'seq': (None, 4), 'token': (None, token)}
         )
+        logger.debug('r: ({})\n{}'.format(r.status_code, r.text))
         r.raise_for_status()
-        print(' -> [Info] 上传成功，请等待nessusd更新后自动重启')
+        logger.info('上传成功，请等待nessusd更新后自动重启')
     except:
-        print(' -> [Error] 上传失败')
-        traceback.print_exc(limit=1)
+        logger.error('上传失败\n{}'.format(traceback.format_exc(limit=1)))
 
 
 def start_v2ray(config: str):
+    logger = logging.getLogger('start_v2ray()')
+    logger.debug('args: {}'.format({'config': config}))
     import subprocess
     try:
-        subprocess.run(['v2ray.exe', 'version'], check=True , capture_output=True)     
+        p = subprocess.run(['v2ray.exe', 'version'], check=True , capture_output=True)
+        logger.debug('stdout: \n{}'.format(p.stdout.decode('utf-8')))
     except:
-        print(' -> [Error] 启动失败')
-        traceback.print_exc(limit=1)
+        logger.error('启动失败\n{}'.format(traceback.format_exc(limit=1)))
         return
 
     subprocess.run(
@@ -235,6 +254,24 @@ def start_v2ray(config: str):
         input=config, 
         text=True
     )
+
+
+def init_logging():
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - [%(levelname)s] - %(name)s -> %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        filename='nessus-update.log', 
+        encoding='utf-8'
+    )
+
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter(
+        fmt='%(asctime)s - [%(levelname)s] - %(name)s -> %(message)s',
+        datefmt='%H:%M:%S'
+    ))
+    ch.setLevel(logging.INFO)
+    logging.getLogger('').addHandler(ch)
 
 
 if __name__ == '__main__':
@@ -245,6 +282,10 @@ if __name__ == '__main__':
     print('')
 
     os.chdir(os.path.dirname(sys.argv[0]))
+    init_logging()
+    logger = logging.getLogger('nessus-update')
+    logger.debug('cwd: {}'.format(os.getcwd()))
+
     config = read_conf('nessus-update.conf')
     if not test_conf(config):
         os.system('pause')
@@ -253,7 +294,7 @@ if __name__ == '__main__':
     # 使用离线文件时，检查其plugin_set版本
     config['local'] ={'plugin_set': ''}
     if os.path.exists('all-2.0.tar.gz'):
-        print('[Info] 检查本地文件有效性...')
+        logger.info('检查本地文件有效性...')
         try:
             with tarfile.open('all-2.0.tar.gz', 'r:gz') as f:
                 with f.extractfile('plugin_feed_info.inc') as info:
@@ -265,27 +306,29 @@ if __name__ == '__main__':
                             config['local']['plugin_set'] = line.split('"')[1]
                             break
             assert config['local']['plugin_set']
-            print(' -> 特征库版本: <{}>'.format(config['local']['plugin_set']))
+            logger.info('特征库版本: <{}>'.format(config['local']['plugin_set']))
         except:
-            print(' -> 文件无效')
-            traceback.print_exc(limit=1)
+            logger.warning('文件无效\n{}'.format(traceback.format_exc(limit=1)))
 
     # 将所有plugin_set格式化成datetime形式
     if config['nessus']['plugin_set']:
         current_datetime = datetime.datetime.strptime(config['nessus']['plugin_set'], '%Y%m%d%H%M')
     else:
         current_datetime = datetime.datetime.fromtimestamp(0)
+    logger.debug('current: {}'.format(current_datetime))
     if config['local']['plugin_set']:
         local_datetime = datetime.datetime.strptime(config['local']['plugin_set'], '%Y%m%d%H%M')
     else:
         local_datetime = datetime.datetime.fromtimestamp(0)
+    logger.debug('local: {}'.format(local_datetime))
     if config['oss']['plugin_set']:
         remote_datetime = datetime.datetime.strptime(config['oss']['plugin_set'], '%Y%m%d%H%M')
     else:
         remote_datetime = datetime.datetime.fromtimestamp(0)
+    logger.debug('remote: {}'.format(remote_datetime))
 
     if current_datetime >= max(local_datetime, remote_datetime):
-        print('[Info] 启动在线更新...')
+        logger.info('启动在线更新...')
         start_v2ray(config['v2ray']['json'])
         os.system('pause')
         sys.exit(0)
@@ -297,12 +340,13 @@ if __name__ == '__main__':
     if (datetime.datetime.now() - remote_datetime <= datetime.timedelta(days=15) and 
         remote_datetime - current_datetime > datetime.timedelta(days=15) and
         remote_datetime > local_datetime):
+        logger.debug('enter download')
         result = input(' -> 是否从OSS缓存下载特征库<{}> ({:,}KB)？（Y/n）'.format(
             config['oss']['plugin_set'], 
             int(config['oss']['size']) // 1024,
         ))
         if result.lower() != 'n':
-            print(' -> 下载中...')
+            logger.info('下载中...')
             r = requests.get(config['oss']['url'], stream=True)
             progress_bar = tqdm(total=int(config['oss']['size']), unit='iB', unit_scale=True, desc='all-2.0.tar.gz')
             with open('all-2.0.tar.gz.tmp', 'wb') as file:
@@ -313,9 +357,10 @@ if __name__ == '__main__':
             if qiniu.etag('all-2.0.tar.gz.tmp') == config['oss']['etag']:
                 shutil.move('all-2.0.tar.gz.tmp', 'all-2.0.tar.gz')
                 local_datetime = remote_datetime
+                logger.debug('local: {}'.format(local_datetime))
                 config['local']['plugin_set'] = config['oss']['plugin_set']
             else:
-                print(' -> [Warning] Etag校验失败')
+                logger.warning('Etag校验失败')
                 os.remove('all-2.0.tar.gz.tmp')
 
     # 触发本地更新需满足的条件：
@@ -328,7 +373,7 @@ if __name__ == '__main__':
         sys.exit(0)
 
     # 均不满足时启动在线更新
-    print('[Info] 启动在线更新...')
+    logger.info('启动在线更新...')
     start_v2ray(config['v2ray']['json'])
     os.system('pause')
     sys.exit(0)
