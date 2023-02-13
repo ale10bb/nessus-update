@@ -158,6 +158,7 @@ def test_conf(config:dict) -> bool:
     try:
         print(' -> 文件路径: {}'.format(config['oss']['url']))
         r = requests.head(config['oss']['url'])
+        r.raise_for_status()
         config['oss']['size'] = r.headers['Content-Length']
         config['oss']['etag'] = r.headers['Etag'][1:-1]
         config['oss']['plugin_set'] = r.headers['X-Qn-Meta-Plugin-Set']
@@ -230,6 +231,12 @@ def start_v2ray(config: str):
 
 
 if __name__ == '__main__':
+    print('*******************************************')
+    print('          Nessus Scanner 更新工具          ')
+    print('                         - v2.1.0          ')
+    print('*******************************************')
+    print('')
+
     os.chdir(os.path.dirname(sys.argv[0]))
     config = read_conf('nessus-update.conf')
     if not test_conf(config):
