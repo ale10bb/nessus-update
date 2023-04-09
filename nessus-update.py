@@ -335,9 +335,14 @@ def init_logging():
 
 
 if __name__ == '__main__':
+    import platform
+    import nuitka.Version
     print('*******************************************')
     print('          Nessus Scanner 更新工具          ')
-    print('                         - v2.1.1          ')
+    print('          - v2.1.1-{}-{}'.format(
+        platform.python_version(), 
+        nuitka.Version.getNuitkaVersion()
+    ))
     print('*******************************************')
     print('')
 
