@@ -6,4 +6,4 @@ requests
 nuitka
 ordered-set
 zstandard
-# nuitka --output-dir=nuitka --windows-icon-from-ico=res/icon.ico --onefile x.py
+# nuitka --output-dir=nuitka --windows-icon-from-ico=res/nessus.ico --onefile nessus-update.py
