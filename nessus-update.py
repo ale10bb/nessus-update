@@ -38,6 +38,7 @@ def read_conf(conf_path: str) -> dict:
     # 配置文件必须存在且内容必须合法
     logger.info('读取配置...')
     from configparser import ConfigParser
+    import socket
     try:
         if not os.path.exists(conf_path):
             logger.warning('nessus-update.conf不存在，写入默认配置')
@@ -68,10 +69,11 @@ def read_conf(conf_path: str) -> dict:
         ret['v2ray']['address'] = config.get('v2ray', 'address', fallback='nessus-update.chenql.cn')
         ret['v2ray']['port'] = config.getint('v2ray', 'port', fallback=8835)
         ret['v2ray']['user'] = config.get('v2ray', 'user', fallback='xxx')
-        ret['v2ray']['host'] = ret['nessus']['host']
+        ret['v2ray']['host'] = socket.gethostbyname(ret['nessus']['host'])
         logger.debug('v2ray.address: {}'.format(ret['v2ray']['address']))
         logger.debug('v2ray.port: {}'.format(ret['v2ray']['port']))
         logger.debug('v2ray.user: {}'.format(ret['v2ray']['user']))
+        logger.debug('v2ray.host: {}'.format(ret['v2ray']['host']))
         
         ret['oss']['url'] = config.get('oss', 'url', fallback='http://static.chenql.cn/nessus/all-2.0.tar.gz')
         logger.debug('oss.url: {}'.format(ret['oss']['url']))
