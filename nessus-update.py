@@ -347,7 +347,7 @@ if __name__ == '__main__':
     print('')
 
     import sys
-    os.chdir(os.path.dirname(sys.argv[0]))
+    os.chdir(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
     init_logging()
     logger = logging.getLogger('nessus-update')
     logger.debug('cwd: {}'.format(os.getcwd()))
