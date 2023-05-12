@@ -339,7 +339,7 @@ if __name__ == '__main__':
     import nuitka.Version
     print('*******************************************')
     print('          Nessus Scanner 更新工具          ')
-    print('          - v2.2.0-{}-{}'.format(
+    print('          - v2.2.1-{}-{}'.format(
         platform.python_version(), 
         nuitka.Version.getNuitkaVersion()
     ))
