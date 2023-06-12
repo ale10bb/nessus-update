@@ -5,6 +5,7 @@ import datetime
 import qiniu
 from tqdm import tqdm
 import traceback
+from packaging import version
 
 # session用于和 nessus scanner 之间的通信
 import requests
@@ -104,7 +105,16 @@ def test_nessus(config: dict) -> bool:
         r = session.get(f"{base_url}/feed")
         r.raise_for_status()
         logging.debug('r: (%s)\n%s', r.status_code, r.text)
-        logging.info('客户端版本: %s', ET.fromstring(r.text).find('./contents/server_version').text)
+        current_version = ET.fromstring(r.text).find('./contents/server_version').text
+        logging.info('客户端版本: %s', current_version)
+        # 获取最新客户端版本
+        try:
+            data = requests.get('https://www.tenable.com/downloads/api/v2/pages/nessus').json()
+            versions = [version.parse(item[9:]) for item in data['releases']['latest'].keys()]
+            if version.parse(current_version) < max(versions):
+                logging.warning('检测到新版本Nessus客户端<%s>，可自行下载安装: https://www.tenable.com/downloads/api/v2/pages/nessus/files/Nessus-latest-x64.msi', str(max(versions)))
+        except:
+            pass
 
         r = session.post(f"{base_url}/login", 
             data={'login': config['username'], 'password': config['password'], 'seq': 1},

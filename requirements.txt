@@ -1,6 +1,7 @@
 tqdm
 qiniu
 requests
+packaging
 
 # 打包相关
 nuitka
