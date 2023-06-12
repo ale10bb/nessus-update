@@ -96,19 +96,18 @@ def test_nessus(config: dict) -> bool:
     logging.info('检查nessus配置...')
     try:
         session = requests.session()
-        base_url = 'https://{}:8834'.format(config['host'])
+        base_url = f"https://{config['host']}:8834"
         logging.info('连接目标: %s', base_url)
         session.headers.update({'User-Agent': 'SecurityCenter/0.0.0'})
         session.verify = False
         # 无法连接或登录失败时终止验证
-        r = session.get('{}/feed'.format(base_url))
+        r = session.get(f"{base_url}/feed")
         r.raise_for_status()
         logging.debug('r: (%s)\n%s', r.status_code, r.text)
         logging.info('客户端版本: %s', ET.fromstring(r.text).find('./contents/server_version').text)
 
-        r = session.post(
-            '{}/login'.format(base_url), 
-            data={'login': config['username'], 'password': config['password'], 'seq': 1}
+        r = session.post(f"{base_url}/login", 
+            data={'login': config['username'], 'password': config['password'], 'seq': 1},
         )
         logging.debug('r: (%s)\n%s', r.status_code, r.text)
         r.raise_for_status()
@@ -119,9 +118,8 @@ def test_nessus(config: dict) -> bool:
         # 未注册的新scanner的plugin_set标签值为空(None)
         config['plugin_set'] = login_xml.find('./contents/plugin_set').text
         logging.info('特征库版本: <%s>', config['plugin_set'])
-        r = session.post(
-            '{}/logout'.format(base_url), 
-            files={'seq': (None, 2), 'token': (None, token)}
+        r = session.post(f"{base_url}/logout", 
+            files={'seq': (None, 2), 'token': (None, token)},
         )
         logging.debug('r: (%s)\n%s', r.status_code, r.text)
         r.raise_for_status()
@@ -204,13 +202,16 @@ def start_offline(config_nessus, config_local):
     logging.info('特征库版本: <%s>', config_local['plugin_set'])
     try:
         session = requests.session()
-        base_url = 'https://{}:8834'.format(config_nessus['host'])
+        base_url = f"https://{config_nessus['host']}:8834"
         session.headers.update({'User-Agent': 'SecurityCenter/0.0.0'})
         session.verify = False
         logging.info('seq_1 (login)')
-        r = session.post(
-            '{}/login'.format(base_url), 
-            data={'login': config_nessus['username'], 'password': config_nessus['password'], 'seq': 1}
+        r = session.post(f"{base_url}/login", 
+            data={
+                'login': config_nessus['username'], 
+                'password': config_nessus['password'], 
+                'seq': 1,
+            }
         )
         logging.debug('r: (%s)\n%s', r.status_code, r.text)
         r.raise_for_status()
@@ -218,24 +219,29 @@ def start_offline(config_nessus, config_local):
 
         logging.info('seq_2 (upload)')
         with open(config_local['path'],'rb') as f:
-            r = session.post(
-                '{}/file/upload'.format(base_url), 
-                files={'token': (None, token), 'seq': (None, 2), 'Filedata': (config_local['path'], f)}
+            r = session.post(f"{base_url}/file/upload", 
+                files={
+                    'token': (None, token), 
+                    'seq': (None, 2), 
+                    'Filedata': (config_local['path'], f),
+                }
             )
             logging.debug('r: (%s)\n%s', r.status_code, r.text)
             r.raise_for_status()
 
         logging.info('seq_3 (process)')
-        r = session.post(
-            '{}/plugins/process'.format(base_url), 
-            files={'token': (None, token), 'seq': (None, 3), 'filename': (None, config_local['path'])}
+        r = session.post(f"{base_url}/plugins/process", 
+            files={
+                'token': (None, token), 
+                'seq': (None, 3), 
+                'filename': (None, config_local['path']),
+            }
         )
         logging.debug('r: (%s)\n%s', r.status_code, r.text)
         r.raise_for_status()
 
         logging.info('seq_4 (logout)')
-        r = session.post(
-            '{}/logout'.format(base_url), 
+        r = session.post(f"{base_url}/logout", 
             files={'seq': (None, 4), 'token': (None, token)}
         )
         logging.debug('r: (%s)\n%s', r.status_code, r.text)
@@ -257,7 +263,7 @@ def start_online(config: dict):
         'dns': {'hosts': {'nessus.local': config['host']}},
         'reverse': {
             'bridges': [
-                {'tag': 'bridge', 'domain': '{}.nessus-tunnel'.format(config['user'])}
+                {'tag': 'bridge', 'domain': f"{config['user']}.nessus-tunnel"}
             ]
         },
         'outbounds': [
@@ -279,7 +285,7 @@ def start_online(config: dict):
                 {
                     'type': 'field',
                     'inboundTag': ['bridge'],
-                    'domain': ['full:{}.nessus-tunnel'.format(config['user'])],
+                    'domain': [f"full:{config['user']}.nessus-tunnel"],
                     'outboundTag': 'toProxy'
                 },
                 {
